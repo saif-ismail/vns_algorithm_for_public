@@ -255,7 +255,33 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
 
     return current_best_criterion_value, change_made, current_best_des, latest_cost
 
+def convert_design_to_uncoded_levels(design:np.ndarray, dict_of_factors:dict, model:pd.DataFrame, dict_all_factor_col_locations:dict):
+    main_eff_locs = {}
+    idx  = 1
+    for eff in model.values:
+        if eff.sum() == 1:
+            factor_name = model.columns[np.where(eff > 0)[0][0]]
+            no_cols = len(dict_all_factor_col_locations[factor_name])
+            main_eff_locs[factor_name] = [col for col in range(idx, idx + no_cols)]
+            idx += no_cols
+        else:
+            idx += 1
 
+    uncoded_design_columns = []
+    for factor_name, factor_instance in dict_of_factors.items():
+        if factor_name in main_eff_locs:
+            cols_in_design = main_eff_locs[factor_name] 
+            if factor_instance.factor_type == 'categorical':
+                mapping = {tuple(v): k for k, v in zip(factor_instance.coded_levels, factor_instance.uncoded_levels)}
+                uncoded_cols = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
+                uncoded_design_columns.append(uncoded_cols.reshape(-1, 1))
+            else:
+                mapping = dict(zip(factor_instance.coded_levels, factor_instance.uncoded_levels))
+                uncoded_col = np.vectorize(mapping.get)(design[:,cols_in_design[0]])
+                uncoded_design_columns.append(uncoded_col.reshape(-1, 1))
+    uncoded_design = np.hstack(uncoded_design_columns)
+    return uncoded_design
+                                   
 def generate_vns_design(params:dict):
 
     # defaults:
@@ -317,6 +343,8 @@ def generate_vns_design(params:dict):
             best_criterion_value = des_criterion_value
             best_design = des.copy()
             best_cost = cost
+
+    best_design = convert_design_to_uncoded_levels(best_design, params['all_factors'], params['model'], dict_locations)
 
     print('Cost \n',best_cost.sum(axis=0))
     print('Design \n',best_design)
