@@ -20,11 +20,11 @@ class continuous_factor(factor):
     def __post_init__(self):
         self.factor_type = 'continuous'
         self.uncoded_levels = np.arange(start=self.minimum, stop=self.maximum + self.step_size, step=self.step_size)
-        self.levels = (2*((self.uncoded_levels-self.minimum)/(self.maximum-self.minimum)))-1
+        self.coded_levels = (2*((self.uncoded_levels-self.minimum)/(self.maximum-self.minimum)))-1
         if self.cost_control:
             missing = [name for name in ['budget', 'min_cost', 'step_cost'] if getattr(self, name) is None]
             assert not missing, f"Missing required arguments: {', '.join(missing)}"
-            self.cost_per_level = [self.min_cost + (itr*self.step_cost) for itr in range(len(self.levels))]
+            self.cost_per_level = [self.min_cost + (itr*self.step_cost) for itr in range(len(self.coded_levels))]
 
 @dataclass
 class discrete_numeric_factor(factor):
@@ -32,7 +32,8 @@ class discrete_numeric_factor(factor):
     cost_per_level: Optional[list] = field(default=None, repr=False)
     budget: Optional[float] = field(default=None, repr=False)
     def __post_init__(self):
-        self.levels = np.array(self.levels)
+        self.uncoded_levels = np.array(self.levels)
+        self.coded_levels = (2*((self.uncoded_levels-self.uncoded_levels.min())/(self.uncoded_levels.max()-self.uncoded_levels.min())))-1
         self.factor_type = 'discrete'
         if self.cost_control:
             missing = [name for name in ['cost_per_level', 'budget'] if getattr(self, name) is None]
@@ -45,9 +46,9 @@ class categorical_factor(factor):
     budget: Optional[float] = field(default=None, repr=False)
     def __post_init__(self):
         self.factor_type = 'categorical'
-        self.levels = np.eye(len(self.labels))[:,1:]
-        self.levels[0,:] = -1
-        self.levels = [row for row in self.levels]
+        self.coded_levels = np.eye(len(self.labels))[:,1:]
+        self.coded_levels[0,:] = -1
+        self.coded_levels = [row for row in self.coded_levels]
         if self.cost_control:
             missing = [name for name in ['cost_per_level', 'budget'] if getattr(self, name) is None]
             assert not missing, f"Missing required arguments: {', '.join(missing)}"
@@ -57,7 +58,7 @@ def get_locations_for_all_factors(dict_of_factors:dict):
     start_ix = 0
     for factor_name, factor_instance in dict_of_factors.items():
         if factor_instance.factor_type == 'categorical':
-            no_cols = len(factor_instance.levels)-1
+            no_cols = len(factor_instance.coded_levels)-1
         else:
             no_cols = 1
         stop_ix = start_ix + no_cols
@@ -99,7 +100,7 @@ def generate_candidate_set(params:dict):
     '''    
 
     # get levels for every factor
-    levels_dict = {factor_name:factor_instance.levels for factor_name, factor_instance in params['all_factors'].items()}
+    levels_dict = {factor_name:factor_instance.uncoded_levels for factor_name, factor_instance in params['all_factors'].items()}
 
     all_combs = expand_combinations(levels_dict)
 
@@ -140,11 +141,11 @@ def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_loc
         factor_instance = dict_of_factors[factor_name]
         total_budgets.append(factor_instance.budget)
         if len(cols_in_design) == 1:
-            mapping = dict(zip(factor_instance.levels, factor_instance.cost_per_level))
+            mapping = dict(zip(factor_instance.coded_levels, factor_instance.cost_per_level))
             cost_array[:,col_ix] = np.vectorize(mapping.get)(design[:,cols_in_design[0]])
         else:
             # Build a mapping from tuple(row) -> value
-            mapping = {tuple(row): val for row, val in zip(factor_instance.levels, factor_instance.cost_per_level)}
+            mapping = {tuple(row): val for row, val in zip(factor_instance.coded_levels, factor_instance.cost_per_level)}
             cost_array[:,col_ix] = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
     return cost_array, total_budgets
 
