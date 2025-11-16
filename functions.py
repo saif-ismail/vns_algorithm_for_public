@@ -267,19 +267,19 @@ def convert_design_to_uncoded_levels(design:np.ndarray, dict_of_factors:dict, mo
         else:
             idx += 1
 
-    uncoded_design_columns = []
+    uncoded_design = {}
     for factor_name, factor_instance in dict_of_factors.items():
         if factor_name in main_eff_locs:
             cols_in_design = main_eff_locs[factor_name] 
             if factor_instance.factor_type == 'categorical':
-                mapping = {tuple(v): k for k, v in zip(factor_instance.coded_levels, factor_instance.uncoded_levels)}
+                mapping = {tuple(k): v for k, v in zip(factor_instance.coded_levels, factor_instance.uncoded_levels)}
                 uncoded_cols = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
-                uncoded_design_columns.append(uncoded_cols.reshape(-1, 1))
+                uncoded_design[factor_name] = uncoded_cols
             else:
                 mapping = dict(zip(factor_instance.coded_levels, factor_instance.uncoded_levels))
                 uncoded_col = np.vectorize(mapping.get)(design[:,cols_in_design[0]])
-                uncoded_design_columns.append(uncoded_col.reshape(-1, 1))
-    uncoded_design = np.hstack(uncoded_design_columns)
+                uncoded_design[factor_name] = uncoded_col
+    uncoded_design = pd.DataFrame(uncoded_design)
     return uncoded_design
                                    
 def generate_vns_design(params:dict):
@@ -353,4 +353,4 @@ def generate_vns_design(params:dict):
     print('Number of unique combinations \n', len(np.unique(best_design, axis = 0)))
 
     # convert back to uncoded levels
-    np.savetxt(f'vns_design.csv', best_design)
+    best_design.to_csv('vns_design.csv', index=False)
