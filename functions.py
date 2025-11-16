@@ -328,8 +328,15 @@ def generate_vns_design(params:dict):
         no_start_points = prng.randrange(candidate_set_expanded.shape[1]+2, candidate_set_expanded.shape[1]+3)
         try:
             des, cost, des_criterion_value = get_start_design(candidate_set_expanded, no_start_points, cost_array, total_budgets, evaluation_calculation, prng)
-        except:
-            continue
+            if des is None: # Explicitly check for the failure case
+                raise TypeError("get_start_design returned None")
+        except (TypeError, np.linalg.LinAlgError) as e:
+            print(f"Warning: Start {start_itr + 1} failed. Reason: {e}")
+            raise RuntimeError(
+                "Could not generate a valid starting design. "
+                "Please check factor settings, constraints, or model. "
+                "The design may be non-singular."
+            ) from e
         # here des includes model matrix columns by default and cost columns
         path = [1]
         for neighborhood_option in path:
