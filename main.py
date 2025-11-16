@@ -18,7 +18,9 @@ if __name__ == '__main__':
                     'C':continuous_factor(cost_control=False, 
                         minimum=12, 
                         maximum=36, 
-                        step_size=3)
+                        step_size=3),
+                    'D':categorical_factor(cost_control=False,
+                        labels=['L1','L2','L3','L4'])
                     }
 
     # Build a dictionary with all following parameters:
@@ -30,12 +32,14 @@ if __name__ == '__main__':
     parameters['max_neighborhood'] = 2
     parameters['criterion'] = 'D'#D,A
     parameters['run_size_limit'] = None#None, or an integer number
+    parameters['constraints'] = ['B <= C'] #list of constraint strings
+
     # parameters['linear_constraints'] = list_of_contraints
 
     generate_vns_design(parameters)
 
     #TODO:
-    # add a requirements file
-    # convert design back to uncoded levels
-    # implement constraints
-    # add I-optimality
+    # [X] add a requirements file
+    # [X] convert design back to uncoded levels
+    # [X] implement constraints
+    # [ ] add I-optimality
