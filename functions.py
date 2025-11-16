@@ -46,6 +46,7 @@ class categorical_factor(factor):
     budget: Optional[float] = field(default=None, repr=False)
     def __post_init__(self):
         self.factor_type = 'categorical'
+        self.uncoded_levels = np.array(self.labels)
         self.coded_levels = np.eye(len(self.labels))[:,1:]
         self.coded_levels[0,:] = -1
         self.coded_levels = [row for row in self.coded_levels]
@@ -91,7 +92,18 @@ def expand_combinations(levels_dict, flatten_arrays=True):
             # Keep arrays as-is, but convert np.generic scalars to Python types
             result.append(tuple(x.item() if isinstance(x, np.generic) else x for x in combo))
     
-    return np.array(result)
+    return pd.DataFrame(result, columns=levels_dict.keys())
+
+def filter_constraints(all_combs:pd.DataFrame, constraints:list):
+    '''
+    THIS FUNCTION FILTERS THE DATAFRAME BASED ON THE PROVIDED CONSTRAINTS
+    '''    
+    if not constraints:
+        return all_combs
+
+    query_str = ' & '.join(constraints)
+    candidate_set = all_combs.query(query_str)
+    return candidate_set
 
 def generate_candidate_set(params:dict):
     '''
@@ -99,22 +111,32 @@ def generate_candidate_set(params:dict):
     LINEAR CONSTRAINTS FOR CODED VARIABLES 
     '''    
 
-    # get levels for every factor
+    # get uncoded levels for every factor
     levels_dict = {factor_name:factor_instance.uncoded_levels for factor_name, factor_instance in params['all_factors'].items()}
 
+    # Generate all combinations of uncoded levels
     all_combs = expand_combinations(levels_dict)
 
-    # # taking linear constraints into account
-    # for ix, itr in enumerate(constraints_i):
-    #     condition_pass = np.flatnonzero(np.apply_along_axis(func1d=constraint_func, axis=1, arr=all_combs, specific_constraint=itr)==True)
-    #     if condition_pass.shape[0] >= 0:
-    #         all_combs = all_combs[condition_pass,:]          
-    #     else:
-    #         print('no feasible candidate set found')
-    #         return None
+    # Filter out combinations that do not satisfy constraints
+    filtered_combs = filter_constraints(all_combs, params.get('constraints', [])).copy()
 
-    print(f'Candidate set ready with {all_combs.shape[0]} points')
-    return all_combs
+    # Convert from uncoded to coded levels
+    column_arrays = []
+    for factor_name, factor_instance in params['all_factors'].items():
+        mapping = dict(zip(factor_instance.uncoded_levels, factor_instance.coded_levels))
+        if factor_instance.factor_type == 'categorical':
+            mapped_cols = np.array(filtered_combs[factor_name].map(mapping).to_list())
+            column_arrays.append(mapped_cols)
+            
+        else:
+            mapped_col = filtered_combs[factor_name].map(mapping).to_numpy().reshape(-1, 1)
+            column_arrays.append(mapped_col)
+
+    candidate_set = np.hstack(column_arrays)
+
+    
+    print(f'Candidate set ready with {candidate_set.shape[0]} points')
+    return candidate_set
 
 def create_model_matrix(design:np.ndarray, model:pd.DataFrame, dict_all_factor_col_locations:dict):
     model_mat = np.ones((design.shape[0],1))
@@ -233,6 +255,7 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
 
     return current_best_criterion_value, change_made, current_best_des, latest_cost
 
+
 def generate_vns_design(params:dict):
 
     # defaults:
@@ -247,7 +270,7 @@ def generate_vns_design(params:dict):
     # get individual locations for each factor associated columns in the model matrix (intercept included in position 0)
     dict_locations = get_locations_for_all_factors(params['all_factors'])
 
-    # generate all combinations (taking constraints into account - not implemented)
+    # generate all combinations (taking constraints into account)
     candidate_set = generate_candidate_set(params)
 
     # get costs for every row for every factor
@@ -259,7 +282,7 @@ def generate_vns_design(params:dict):
         total_budgets.append(limit)
 
     # generate the model matrix
-    candidate_set_expanded = create_model_matrix(candidate_set, params['model'],dict_locations)
+    candidate_set_expanded = create_model_matrix(candidate_set, params['model'], dict_locations)
 
     for start_itr in tqdm(range(params['no_starts'])):
         # select the number of points in the initial design
@@ -287,7 +310,7 @@ def generate_vns_design(params:dict):
         else:
             if criterion == 'D':
                 check = des_criterion_value > best_criterion_value
-            elif criterion == 'A':
+            elif criterion == 'A' or criterion == 'I':
                 check = des_criterion_value < best_criterion_value
 
         if check:
