@@ -119,25 +119,25 @@ def generate_candidate_set(params:dict):
     all_combs = expand_combinations(levels_dict)
 
     # Filter out combinations that do not satisfy constraints
-    filtered_combs = filter_constraints(all_combs, params.get('constraints', [])).copy()
+    candidate_set_uncoded = filter_constraints(all_combs, params.get('constraints', [])).copy()
 
     # Convert from uncoded to coded levels
     column_arrays = []
     for factor_name, factor_instance in params['all_factors'].items():
         mapping = dict(zip(factor_instance.uncoded_levels, factor_instance.coded_levels))
         if factor_instance.factor_type == 'categorical':
-            mapped_cols = np.array(filtered_combs[factor_name].map(mapping).to_list())
+            mapped_cols = np.array(candidate_set_uncoded[factor_name].map(mapping).to_list())
             column_arrays.append(mapped_cols)
             
         else:
-            mapped_col = filtered_combs[factor_name].map(mapping).to_numpy().reshape(-1, 1)
+            mapped_col = candidate_set_uncoded[factor_name].map(mapping).to_numpy().reshape(-1, 1)
             column_arrays.append(mapped_col)
 
-    candidate_set = np.hstack(column_arrays)
+    candidate_set_coded = np.hstack(column_arrays)
 
     
-    print(f'Candidate set ready with {candidate_set.shape[0]} points')
-    return candidate_set
+    print(f'Candidate set ready with {candidate_set_coded.shape[0]} points')
+    return candidate_set_uncoded, candidate_set_coded
 
 def create_model_matrix(design:np.ndarray, model:pd.DataFrame, dict_all_factor_col_locations:dict):
     model_mat = np.ones((design.shape[0],1))
@@ -177,21 +177,20 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
         potential_candidate_points = prng.sample(range(candidate_set_expanded.shape[0]), no_start_points)
         #cost check
         current_cost_for_all_vars = cost_array[potential_candidate_points]
-        low_cost = True
         if np.any(current_cost_for_all_vars.sum(axis=0) > total_budgets):
-            low_cost = False
             continue
-        
-        if low_cost:
-            full_mat = candidate_set_expanded[potential_candidate_points,:]
-            info_mat_i = full_mat.T @ full_mat
-            det = np.linalg.det(info_mat_i)
-            if det > 0:
-                return full_mat, current_cost_for_all_vars, evaluation_calculation(info_mat_i, np.inf)[1]
-            else:
-                continue
 
-    return None
+        full_mat = candidate_set_expanded[potential_candidate_points,:]
+        info_mat_i = full_mat.T @ full_mat
+
+        if np.linalg.det(info_mat_i) > 0:
+            indices_np = np.array(potential_candidate_points)
+            criterion_value = evaluation_calculation(info_mat_i, np.inf)[1]
+            return full_mat, current_cost_for_all_vars, criterion_value, indices_np
+        else:
+            continue
+
+    return None, None, None, None
 
 def evaluation_func(criterion:str, candidate_set_expanded:np.ndarray):
     if criterion == 'D':
@@ -241,22 +240,21 @@ def _exhaustive_search_list(
 
     # initialize
     change_made = False
-    current_best_des = start_design.copy()
-    current_best_criterion_value = start_des_criterion_value
-    current_best_cost = current_cost
-    latest_cost = current_cost
+    best_criterion_found = start_des_criterion_value
+    best_rows_to_drop = ()
+    best_rows_to_add = ()
 
     for row_to_drop, row_to_add in list_ixs:
         new_runs_costs = cost_array[row_to_add, :]
         cost_new = new_runs_costs.sum(axis=0)
-        cost_reduction = current_best_cost[list(row_to_drop), :].sum(axis=0)
+        cost_reduction = current_cost[list(row_to_drop), :].sum(axis=0)
         additional_cost = cost_new - cost_reduction
         
         if np.any(additional_cost > available_budget):
             continue
             
         tmp_full = np.r_[
-            np.delete(current_best_des, list(row_to_drop), 0), 
+            np.delete(start_design, list(row_to_drop), 0), 
             candidate_set_expanded[list(row_to_add), :]
         ]
         info_mat = tmp_full.T @ tmp_full
@@ -264,22 +262,19 @@ def _exhaustive_search_list(
         if np.linalg.det(info_mat) <= 0:
             continue
 
-        quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
+        quality_check, criterion_value = evaluation_calculation(info_mat, best_criterion_found)
 
         if quality_check:
             change_made = True
-            removed_old_run_costs = np.delete(current_best_cost, row_to_drop, axis=0)
-            new_best_cost = np.r_[removed_old_run_costs, new_runs_costs]
             
-            current_best_criterion_value = criterion_value
-            current_best_des = tmp_full.copy()
-            current_best_cost = new_best_cost.copy() # Update cost array for the next iteration's cost check
-            latest_cost = new_best_cost.copy() 
+            best_criterion_found = criterion_value
+            best_rows_to_drop = row_to_drop
+            best_rows_to_add = row_to_add
 
             if search_style != 'best':
                 break
 
-    return current_best_criterion_value, change_made, current_best_des, latest_cost
+    return best_criterion_found, change_made, best_rows_to_drop, best_rows_to_add
 
 def _random_search_capped(
     candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
@@ -295,15 +290,14 @@ def _random_search_capped(
 
     #initialize
     change_made = False
-    current_best_des = start_design.copy()
-    current_best_criterion_value = start_des_criterion_value
-    current_best_cost = current_cost
-    latest_cost = current_cost
+    best_criterion_found = start_des_criterion_value
+    best_rows_to_drop = ()
+    best_rows_to_add = ()
     
     # History Tracking Set to prevent repeating combinations
     visited_neighbors = set() 
-
     attempts = 0
+    
     while attempts < max_attempts:
         row_to_drop = tuple(prng.sample(range(n_start_points), no_rows_to_drop))
         if replication == 'y':
@@ -315,20 +309,19 @@ def _random_search_capped(
         # Check if visited and skip if so
         if neighbor_key in visited_neighbors:
             continue
-            
         visited_neighbors.add(neighbor_key)
         attempts += 1
 
         new_runs_costs = cost_array[row_to_add, :]
         cost_new = new_runs_costs.sum(axis=0)
-        cost_reduction = current_best_cost[list(row_to_drop), :].sum(axis=0)
+        cost_reduction = current_cost[list(row_to_drop), :].sum(axis=0)
         additional_cost = cost_new - cost_reduction
         
         if np.any(additional_cost > available_budget):
             continue
 
         tmp_full = np.r_[
-            np.delete(current_best_des, list(row_to_drop), 0), 
+            np.delete(start_design, list(row_to_drop), 0), 
             candidate_set_expanded[list(row_to_add), :]
         ]
         info_mat = tmp_full.T @ tmp_full
@@ -336,24 +329,30 @@ def _random_search_capped(
         if np.linalg.det(info_mat) <= 0:
             continue
 
-        quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
+        quality_check, criterion_value = evaluation_calculation(info_mat, best_criterion_found)
         
         if quality_check:
             change_made = True
-            removed_old_run_costs = np.delete(current_best_cost, row_to_drop, axis=0)
-            new_best_cost = np.r_[removed_old_run_costs, new_runs_costs]
-            
-            current_best_criterion_value = criterion_value
-            current_best_des = tmp_full.copy()
-            current_best_cost = new_best_cost.copy() 
-            latest_cost = new_best_cost.copy()
 
-            if search_style != 'best': # first improvement strategy (random or sequential)
+            best_criterion_found = criterion_value
+            best_rows_to_drop = row_to_drop
+            best_rows_to_add = row_to_add
+
+            if search_style != 'best':
                 break
-    
-    return current_best_criterion_value, change_made, current_best_des, latest_cost
 
-def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarray, start_des_criterion_value:float, current_cost:np.ndarray, cost_array:np.ndarray, total_budgets:list, relation:str, search_style:str, evaluation_calculation, prng):
+    return best_criterion_found, change_made, best_rows_to_drop, best_rows_to_add
+
+def neighbourhood_search(candidate_set_expanded:np.ndarray, 
+                         start_design:np.ndarray, 
+                         start_des_criterion_value:float, 
+                         current_cost:np.ndarray, 
+                         cost_array:np.ndarray, 
+                         total_budgets:list, 
+                         relation:str, 
+                         search_style:str, 
+                         evaluation_calculation, 
+                         prng):
     
     # inputs (default settings)
     replication = 'y'                       # allow replicate rows in design (y/n)
@@ -362,28 +361,19 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
 
     no_rows_to_drop = int(relation[0])
     no_rows_to_add = int(relation[1])
-
-    # Get total number of runs in candidate set and start design
     n_candidate_points = candidate_set_expanded.shape[0]
     n_start_points = start_design.shape[0]
 
     try:
-        # Number of ways to drop k1 from N1
         drops = math.comb(n_start_points, no_rows_to_drop)
-        
-        # Number of ways to add k2 from N2 (with or without replacement)
         if replication == 'y':
             adds = n_candidate_points ** no_rows_to_add
         else:
             adds = math.comb(n_candidate_points, no_rows_to_add)
             
         total_unique_neighbors = drops * adds
-    except ValueError as e:
-        # Handle cases where math.comb fails for more robust search (e.g., trying to choose 5 from 3)
-        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 # Force large search
-    except OverflowError:
-        # Handle cases where the number is too large for standard int/float
-        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 # Force large search
+    except (ValueError, OverflowError):
+        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 
 
     if total_unique_neighbors <= MAX_NEIGHBORS_FOR_LIST:
         return _exhaustive_search_list(
@@ -391,37 +381,11 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
             cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication
         )
     else:
+        capped_attempts = min(MAX_ATTEMPTS, total_unique_neighbors)
         return _random_search_capped(
             candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
-            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts=min(MAX_ATTEMPTS, total_unique_neighbors)
+            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts=capped_attempts
         )
-
-def convert_design_to_uncoded_levels(design:np.ndarray, dict_of_factors:dict, model:pd.DataFrame, dict_all_factor_col_locations:dict):
-    main_eff_locs = {}
-    idx  = 1
-    for eff in model.values:
-        if eff.sum() == 1:
-            factor_name = model.columns[np.where(eff > 0)[0][0]]
-            no_cols = len(dict_all_factor_col_locations[factor_name])
-            main_eff_locs[factor_name] = [col for col in range(idx, idx + no_cols)]
-            idx += no_cols
-        else:
-            idx += 1
-
-    uncoded_design = {}
-    for factor_name, factor_instance in dict_of_factors.items():
-        if factor_name in main_eff_locs:
-            cols_in_design = main_eff_locs[factor_name] 
-            if factor_instance.factor_type == 'categorical':
-                mapping = {tuple(k): v for k, v in zip(factor_instance.coded_levels, factor_instance.uncoded_levels)}
-                uncoded_cols = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
-                uncoded_design[factor_name] = uncoded_cols
-            else:
-                mapping = dict(zip(factor_instance.coded_levels, factor_instance.uncoded_levels))
-                uncoded_col = np.vectorize(mapping.get)(design[:,cols_in_design[0]])
-                uncoded_design[factor_name] = uncoded_col
-    uncoded_design = pd.DataFrame(uncoded_design)
-    return uncoded_design
                                    
 def generate_vns_design(params:dict):
 
@@ -429,17 +393,17 @@ def generate_vns_design(params:dict):
     neighbors = ['01', '11', '12', '22']
     search_style = 'random'#'best'
     prng = params['prng']
-    limit = params['run_size_limit']
+    limit = params.get('run_size_limit', None)
     criterion = params['criterion']
 
     # get individual locations for each factor associated columns in the model matrix (intercept included in position 0)
     dict_locations = get_locations_for_all_factors(params['all_factors'])
 
     # generate all combinations (taking constraints into account)
-    candidate_set = generate_candidate_set(params)
+    candidate_set_uncoded, candidate_set_coded = generate_candidate_set(params)
 
     # get costs for every row for every factor
-    cost_array, total_budgets = calculate_cost_per_row_per_factor(candidate_set, dict_locations, params['all_factors'])
+    cost_array, total_budgets = calculate_cost_per_row_per_factor(candidate_set_coded, dict_locations, params['all_factors'])
 
     # add cost constraint for run size limit
     if limit != None:
@@ -447,16 +411,23 @@ def generate_vns_design(params:dict):
         total_budgets.append(limit)
 
     # generate the model matrix
-    candidate_set_expanded = create_model_matrix(candidate_set, params['model'], dict_locations)
+    candidate_set_expanded = create_model_matrix(candidate_set_coded, params['model'], dict_locations)
 
     # get evaluation function
     evaluation_calculation = evaluation_func(criterion, candidate_set_expanded)
+
+    best_criterion_value = -np.inf if criterion == 'D' else np.inf
+    best_design = None # This is the model matrix
+    best_cost = None
+    best_uncoded_design = None # These are the uncoded factor levels
 
     for start_itr in tqdm(range(params['no_starts'])):
         # select the number of points in the initial design
         no_start_points = prng.randrange(candidate_set_expanded.shape[1]+2, candidate_set_expanded.shape[1]+3)
         try:
-            des, cost, des_criterion_value = get_start_design(candidate_set_expanded, no_start_points, cost_array, total_budgets, evaluation_calculation, prng)
+            des, cost, des_criterion_value, design_indices = get_start_design(
+                candidate_set_expanded, no_start_points, cost_array, total_budgets, evaluation_calculation, prng
+                )
             if des is None: # Explicitly check for the failure case
                 raise TypeError("get_start_design returned None")
         except (TypeError, np.linalg.LinAlgError) as e:
@@ -470,8 +441,24 @@ def generate_vns_design(params:dict):
         path = [1]
         for neighborhood_option in path:
             relation = neighbors[neighborhood_option-1]
-            des_criterion_value, change_made, des, cost = neigborhood_search(candidate_set_expanded, des, des_criterion_value, cost, cost_array, total_budgets, relation, search_style, evaluation_calculation, prng)
+            
+            new_criterion, change_made, rows_to_drop, rows_to_add = neighbourhood_search(
+                candidate_set_expanded, des, des_criterion_value, cost, cost_array, 
+                total_budgets, relation, search_style, evaluation_calculation, prng
+                )
+                
             if change_made:# continue to next neighborhood
+                # Update uncoded design matrix
+                temp_indices = np.delete(design_indices, list(rows_to_drop), 0)
+                design_indices = np.r_[temp_indices, list(rows_to_add)]
+
+                # Rebuild the design and cost from the new indices
+                des = candidate_set_expanded[design_indices, :]
+                cost = cost_array[design_indices, :]
+
+                # Update the criterion
+                des_criterion_value = new_criterion
+
                 path.append(1)
                 continue
             else:
@@ -491,15 +478,17 @@ def generate_vns_design(params:dict):
         if check:
             best_criterion_value = des_criterion_value
             best_design = des.copy()
-            best_cost = cost
+            best_cost = cost.copy()
+            best_design_indices = design_indices.copy() 
 
-    best_design = convert_design_to_uncoded_levels(best_design, params['all_factors'], params['model'], dict_locations)
+    if best_design_indices is not None:
+        best_uncoded_design = candidate_set_uncoded.iloc[best_design_indices].reset_index(drop=True)
 
     print('Cost \n',best_cost.sum(axis=0))
-    print('Design \n',best_design)
+    print('Design \n',best_uncoded_design)
     print('Criterion value \n',best_criterion_value)
-    print('Shape of design \n', best_design.shape)
-    print('Number of unique combinations \n', len(best_design.drop_duplicates()))
+    print('Shape of design \n', best_uncoded_design.shape)
+    print('Number of unique combinations \n', len(best_uncoded_design.drop_duplicates()))
 
     # convert back to uncoded levels
-    best_design.to_csv('vns_design.csv', index=False)
+    best_uncoded_design.to_csv('vns_design.csv', index=False)
