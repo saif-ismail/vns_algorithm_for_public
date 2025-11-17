@@ -23,7 +23,7 @@ This algorithm finds the best possible design *within* your budget.
 * **Granular Cost Control:** Define costs per-level and set a total **budget** for any factor.
 * **Model-Based:** Generates a design optimized for a specific statistical model (e.g., main effects, interactions, quadratics) defined in a simple CSV.
 * **Multiple Optimality Criteria:**
-    * **'D'**-Optimality (default)
+    * **'D'**-Optimality
     * **'A'**-Optimality
     * **'I'**-Optimality
 * **Constraint Handling:** Supports linear constraints between factors (e.g., `'B <= C'`) and can enforce a total **run size limit**.
@@ -43,20 +43,44 @@ This algorithm finds the best possible design *within* your budget.
 
 ## ⚙️ Installation
 
-1.  Clone this repository:
-    ```bash
-    git clone <your-repo-url>
-    cd <your-repo-name>
-    ```
+### 1.  Clone the repository:
+```Bash
+git clone <your-repo-url>
+cd <your-repo-name>
+```
 
-2.  Install the required Python packages from `requirements.txt`:
-    *(You should list `numpy`, `pandas`, and `tqdm` in this file).*
+### 2. Create and activate a virtual environment:
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+ - Windows:
+```PowerShell
 
----
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+ - macOS / Linux:
+```Bash
+python3 -m venv venv
+source venv/bin/activate
+```
+### 3. Install dependencies:
+We use the full path to the virtual environment's Python executable to ensure permissions are handled correctly.
+ - Windows:
+```Powershell
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+ - macOS / Linux:
+```Bash
+python -m pip install -r requirements.txt
+```
+#### 📝 Notes & Troubleshooting
+ - **Prerequisites**: Ensure you have Python 3.8+ installed before proceeding.
+ - **Windows Permissions**: If you encounter a "script is running disabled" error when activating the environment (Step 2), run this command in PowerShell:
+```PowerShell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+ - **Why the full path?** In Step 3, we invoke the Python executable directly (.\venv\Scripts\python.exe) to avoid path conflicts and permission issues common in restricted IT environments.
+ - **File Not Found**: If pip cannot find requirements.txt, ensure you are in the root directory of the project where the file is located.
 
 ## 🚀 How to Use
 
@@ -70,7 +94,7 @@ Create a CSV file (e.g., `new_model.csv`) that defines the model terms you want 
 * **Values:** The order of the term.
 
 **Example: `new_model.csv`**
-This model includes main effects for A, B, and C, and one `A*B` interaction.
+This model includes main effects for A, B, and C, one `A*B` interaction, and one quadratic term (`A*A`).
 
 ```csv
 A,B,C
@@ -78,6 +102,7 @@ A,B,C
 0,1,0
 0,0,1
 1,1,0
+2,0,0
 ```
 
 ### Step 2: Configure Your Experiment (`main.py`)
