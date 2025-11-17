@@ -98,10 +98,10 @@ def filter_constraints(all_combs:pd.DataFrame, constraints:list):
     '''
     THIS FUNCTION FILTERS THE DATAFRAME BASED ON THE PROVIDED CONSTRAINTS
     '''    
-    if len(' & '.join(constraints)) == 0:
+    query_str = ' & '.join(constraints) if isinstance(constraints, list) else constraints
+    if len(query_str) == 0:
         return all_combs
 
-    query_str = ' & '.join(constraints)
     candidate_set = all_combs.query(query_str)
     return candidate_set
 
