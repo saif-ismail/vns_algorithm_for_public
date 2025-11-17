@@ -98,7 +98,7 @@ def filter_constraints(all_combs:pd.DataFrame, constraints:list):
     '''
     THIS FUNCTION FILTERS THE DATAFRAME BASED ON THE PROVIDED CONSTRAINTS
     '''    
-    if not constraints:
+    if not constraints or len(' & '.join(constraints)) == 0:
         return all_combs
 
     query_str = ' & '.join(constraints)
@@ -186,7 +186,7 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
             info_mat_i = full_mat.T @ full_mat
             det = np.linalg.det(info_mat_i)
             if det > 0:
-                return full_mat, current_cost_for_all_vars, evaluation_calculation(full_mat, np.inf)[1]
+                return full_mat, current_cost_for_all_vars, evaluation_calculation(info_mat_i, np.inf)[1]
             else:
                 continue
 
@@ -194,12 +194,12 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
 
 def evaluation_func(criterion:str, candidate_set_expanded:np.ndarray):
     if criterion == 'D':
-        def calc(model_mat:np.ndarray, current_score:float):
-            val = np.linalg.det(model_mat.T @ model_mat)
+        def calc(info_mat:np.ndarray, current_score:float):
+            val = np.linalg.det(info_mat)
             return val > current_score, val
+        
     elif criterion == 'A':
-        def calc(model_mat:np.ndarray, current_score:float):
-            info_mat = model_mat.T @ model_mat
+        def calc(info_mat:np.ndarray, current_score:float):
             val = np.trace(np.linalg.inv(info_mat))
             return val < current_score, val
         
@@ -213,13 +213,9 @@ def evaluation_func(criterion:str, candidate_set_expanded:np.ndarray):
         NUM_RANDOM_SAMPLES = 10000
         samples = candidate_set_expanded[np.random.randint(0, candidate_set_expanded.shape[0], size=NUM_RANDOM_SAMPLES)]
         moments = outer_integral(samples)
-        def calc(model_mat:np.ndarray, current_score:float):
-            info_mat = model_mat.T @ model_mat
-            if np.linalg.matrix_rank(info_mat) >= info_mat.shape[0]:
-                val = np.trace(np.linalg.solve(info_mat, moments)) / moments[0, 0] # normalize by region volume, given at 0,0
-                return val < current_score, val
-            else:
-                return False, np.inf
+        def calc(info_mat:np.ndarray, current_score:float):
+            val = np.trace(np.linalg.solve(info_mat, moments)) / moments[0, 0] # normalize by region volume, given at 0,0
+            return val < current_score, val
     return calc
 
 def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarray, start_des_criterion_value:float, current_cost:np.ndarray, cost_array:np.ndarray, total_budgets:list, relation:str, search_style:str, evaluation_calculation, prng):
@@ -255,7 +251,12 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
         if np.any(additional_cost > available_budget):
             continue
         tmp_full = np.r_[np.delete(start_design, list(row_to_drop), 0), candidate_set_expanded[list(row_to_add),:]]
-        quality_check, criterion_value = evaluation_calculation(tmp_full, current_best_criterion_value)
+        info_mat = tmp_full.T @ tmp_full
+        if np.linalg.det(info_mat) > 0:
+            quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
+        else:
+            continue
+
         if quality_check:
             change_made = True
             removed_old_run_costs = np.delete(current_best_cost, row_to_drop, axis=0)
