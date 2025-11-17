@@ -1,4 +1,5 @@
 import itertools
+import math
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -204,25 +205,27 @@ def evaluation_func(criterion:str):
             return val < current_score, val
     return calc
 
-def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarray, start_des_criterion_value:float, current_cost:np.ndarray, cost_array:np.ndarray, total_budgets:list, relation:str, search_style:str, evaluation_calculation, prng):
+def _exhaustive_search_list(
+    candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
+    cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication
+    ):
     
-    # inputs (default settings)
-    replication = 'y'
-
     available_budget = total_budgets - current_cost.sum(axis=0)
-
     no_rows_to_drop = int(relation[0])
     no_rows_to_add = int(relation[1])
+    
     list1 = list(itertools.combinations(range(start_design.shape[0]), no_rows_to_drop)) # to remove
     if replication == 'y':
         list2 = list(itertools.product(range(candidate_set_expanded.shape[0]), repeat=no_rows_to_add)) # to append
     elif replication == 'n':
         list2 = list(itertools.combinations(range(candidate_set_expanded.shape[0]), no_rows_to_add))
-    list_ixs = list(itertools.product(list1,list2))
+        
+    list_ixs = list(itertools.product(list1, list2))
+    
     if search_style == 'random':
         prng.shuffle(list_ixs)
 
-    #initialize
+    # initialize
     change_made = False
     current_best_des = start_design.copy()
     current_best_criterion_value = start_des_criterion_value
@@ -230,29 +233,154 @@ def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarra
     latest_cost = current_cost
 
     for row_to_drop, row_to_add in list_ixs:
-        new_runs_costs = cost_array[row_to_add,:]
+        new_runs_costs = cost_array[row_to_add, :]
         cost_new = new_runs_costs.sum(axis=0)
-        cost_reduction = current_best_cost[row_to_drop,:].sum(axis=0)
+        cost_reduction = current_best_cost[list(row_to_drop), :].sum(axis=0)
         additional_cost = cost_new - cost_reduction
+        
         if np.any(additional_cost > available_budget):
             continue
-        tmp_full = np.r_[np.delete(start_design, list(row_to_drop), 0), candidate_set_expanded[list(row_to_add),:]]
+            
+        tmp_full = np.r_[
+            np.delete(current_best_des, list(row_to_drop), 0), 
+            candidate_set_expanded[list(row_to_add), :]
+        ]
         info_mat = tmp_full.T @ tmp_full
-        if np.linalg.det(info_mat) > 0:
-            quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
-        else:
+        
+        if np.linalg.det(info_mat) <= 0:
             continue
+
+        quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
 
         if quality_check:
             change_made = True
             removed_old_run_costs = np.delete(current_best_cost, row_to_drop, axis=0)
-            latest_cost = np.r_[removed_old_run_costs, new_runs_costs]
+            new_best_cost = np.r_[removed_old_run_costs, new_runs_costs]
+            
             current_best_criterion_value = criterion_value
             current_best_des = tmp_full.copy()
-            if search_style != 'best': # first improvement strategy (random or sequential)
+            current_best_cost = new_best_cost.copy() # Update cost array for the next iteration's cost check
+            latest_cost = new_best_cost.copy() 
+
+            if search_style != 'best':
                 break
 
     return current_best_criterion_value, change_made, current_best_des, latest_cost
+
+def _random_search_capped(
+    candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
+    cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts
+    ):
+    
+    available_budget = total_budgets - current_cost.sum(axis=0)
+    no_rows_to_drop = int(relation[0])
+    no_rows_to_add = int(relation[1])
+    
+    n_candidate_points = candidate_set_expanded.shape[0]
+    n_start_points = start_design.shape[0]
+
+    #initialize
+    change_made = False
+    current_best_des = start_design.copy()
+    current_best_criterion_value = start_des_criterion_value
+    current_best_cost = current_cost
+    latest_cost = current_cost
+    
+    # History Tracking Set to prevent repeating combinations
+    visited_neighbors = set() 
+
+    attempts = 0
+    while attempts < max_attempts:
+        row_to_drop = tuple(prng.sample(range(n_start_points), no_rows_to_drop))
+        if replication == 'y':
+            row_to_add = tuple(prng.choices(range(n_candidate_points), k=no_rows_to_add))
+        else:
+            row_to_add = tuple(prng.sample(range(n_candidate_points), no_rows_to_add))
+        neighbor_key = (row_to_drop, row_to_add)
+        
+        # Check if visited and skip if so
+        if neighbor_key in visited_neighbors:
+            continue
+            
+        visited_neighbors.add(neighbor_key)
+        attempts += 1
+
+        new_runs_costs = cost_array[row_to_add, :]
+        cost_new = new_runs_costs.sum(axis=0)
+        cost_reduction = current_best_cost[list(row_to_drop), :].sum(axis=0)
+        additional_cost = cost_new - cost_reduction
+        
+        if np.any(additional_cost > available_budget):
+            continue
+
+        tmp_full = np.r_[
+            np.delete(current_best_des, list(row_to_drop), 0), 
+            candidate_set_expanded[list(row_to_add), :]
+        ]
+        info_mat = tmp_full.T @ tmp_full
+        
+        if np.linalg.det(info_mat) <= 0:
+            continue
+
+        quality_check, criterion_value = evaluation_calculation(info_mat, current_best_criterion_value)
+        
+        if quality_check:
+            change_made = True
+            removed_old_run_costs = np.delete(current_best_cost, row_to_drop, axis=0)
+            new_best_cost = np.r_[removed_old_run_costs, new_runs_costs]
+            
+            current_best_criterion_value = criterion_value
+            current_best_des = tmp_full.copy()
+            current_best_cost = new_best_cost.copy() 
+            latest_cost = new_best_cost.copy()
+
+            if search_style != 'best': # first improvement strategy (random or sequential)
+                break
+    
+    return current_best_criterion_value, change_made, current_best_des, latest_cost
+
+def neigborhood_search(candidate_set_expanded:np.ndarray, start_design:np.ndarray, start_des_criterion_value:float, current_cost:np.ndarray, cost_array:np.ndarray, total_budgets:list, relation:str, search_style:str, evaluation_calculation, prng):
+    
+    # inputs (default settings)
+    replication = 'y'                       # allow replicate rows in design (y/n)
+    MAX_NEIGHBORS_FOR_LIST = int(1e6)       # memory cap on row combinations for using exhaustive neighbourhood search
+    MAX_ATTEMPTS = int(5e4)                 # maximum amount of combinations to test for non-exhaustive, random search
+
+    no_rows_to_drop = int(relation[0])
+    no_rows_to_add = int(relation[1])
+
+    # Get total number of runs in candidate set and start design
+    n_candidate_points = candidate_set_expanded.shape[0]
+    n_start_points = start_design.shape[0]
+
+    try:
+        # Number of ways to drop k1 from N1
+        drops = math.comb(n_start_points, no_rows_to_drop)
+        
+        # Number of ways to add k2 from N2 (with or without replacement)
+        if replication == 'y':
+            adds = n_candidate_points ** no_rows_to_add
+        else:
+            adds = math.comb(n_candidate_points, no_rows_to_add)
+            
+        total_unique_neighbors = drops * adds
+    except ValueError as e:
+        # Handle cases where math.comb fails for more robust search (e.g., trying to choose 5 from 3)
+        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 # Force large search
+    except OverflowError:
+        # Handle cases where the number is too large for standard int/float
+        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 # Force large search
+
+    if total_unique_neighbors <= MAX_NEIGHBORS_FOR_LIST:
+        return _exhaustive_search_list(
+            candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
+            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication
+        )
+    else:
+        return _random_search_capped(
+            candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
+            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts=min(MAX_ATTEMPTS, total_unique_neighbors)
+        )
 
 def convert_design_to_uncoded_levels(design:np.ndarray, dict_of_factors:dict, model:pd.DataFrame, dict_all_factor_col_locations:dict):
     main_eff_locs = {}
