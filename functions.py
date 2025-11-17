@@ -98,7 +98,7 @@ def filter_constraints(all_combs:pd.DataFrame, constraints:list):
     '''
     THIS FUNCTION FILTERS THE DATAFRAME BASED ON THE PROVIDED CONSTRAINTS
     '''    
-    if not constraints or len(' & '.join(constraints)) == 0:
+    if len(' & '.join(constraints)) == 0:
         return all_combs
 
     query_str = ' & '.join(constraints)
