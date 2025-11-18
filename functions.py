@@ -172,6 +172,42 @@ def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_loc
             cost_array[:,col_ix] = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
     return cost_array, total_budgets
 
+def check_combinatorial_explosion(max_neighborhood:tuple, 
+                                  run_size_limit:int| None, 
+                                  candidate_set_expanded:np.ndarray, 
+                                  replication:str, 
+                                  threshold:float=1e6):
+    
+    no_rows_to_drop = int(max_neighborhood[0])
+    no_rows_to_add = int(max_neighborhood[1])
+    n_candidate_points = candidate_set_expanded.shape[0]
+    if replication == 'y':
+        adds = n_candidate_points ** no_rows_to_add
+    else:
+        adds = math.comb(n_candidate_points, no_rows_to_add)
+
+    if run_size_limit is not None:
+        total_unique_neighborhoods = math.comb(run_size_limit, no_rows_to_drop) * adds
+    else:
+        minimum_design_size = candidate_set_expanded.shape[1] + 2
+        total_unique_neighborhoods = math.comb(minimum_design_size, no_rows_to_drop) * adds
+
+    if total_unique_neighborhoods > threshold:
+        if run_size_limit is not None:
+            formatted_num = f"{total_unique_neighborhoods:.2e}"
+        else:
+            formatted_num = f"at least {total_unique_neighborhoods:.2e}"
+        
+        msg = (
+            f"\nℹ️  PERFORMANCE NOTICE: High Complexity Detected\n"
+            f"   The chosen maximum neighborhood requires checking {formatted_num} combinations.\n"
+            f"   - The progress bar (tqdm) may appear to stall or move very slowly.\n"
+            f"   - Action: If this takes too long, reduce candidate set size (by using less levels or larger step sizes) or reduce 'max_neighborhood'.\n"
+            f"   - Otherwise: You can ignore this message and wait for completion.\n"
+        )
+
+        print(msg)
+
 def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cost_array:np.ndarray, total_budgets:list, evaluation_calculation, prng):
     for itr in range(10000):# attempts to generate starting design for each start
         potential_candidate_points = prng.sample(range(candidate_set_expanded.shape[0]), no_start_points)
@@ -218,10 +254,17 @@ def evaluation_func(criterion:str, candidate_set_expanded:np.ndarray):
             return val < current_score, val
     return calc
 
-def _exhaustive_search_list(
-    candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
-    cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication
-    ):
+def neighborhood_search(candidate_set_expanded:np.ndarray, 
+                         start_design:np.ndarray, 
+                         start_des_criterion_value:float, 
+                         current_cost:np.ndarray, 
+                         cost_array:np.ndarray, 
+                         total_budgets:list, 
+                         relation:str, 
+                         search_style:str, 
+                         evaluation_calculation, 
+                         prng,
+                         replication:str):
     
     available_budget = total_budgets - current_cost.sum(axis=0)
     no_rows_to_drop = int(relation[0])
@@ -275,121 +318,11 @@ def _exhaustive_search_list(
                 break
 
     return best_criterion_found, change_made, best_rows_to_drop, best_rows_to_add
-
-def _random_search_capped(
-    candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
-    cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts
-    ):
-    
-    available_budget = total_budgets - current_cost.sum(axis=0)
-    no_rows_to_drop = int(relation[0])
-    no_rows_to_add = int(relation[1])
-    
-    n_candidate_points = candidate_set_expanded.shape[0]
-    n_start_points = start_design.shape[0]
-
-    #initialize
-    change_made = False
-    best_criterion_found = start_des_criterion_value
-    best_rows_to_drop = ()
-    best_rows_to_add = ()
-    
-    # History Tracking Set to prevent repeating combinations
-    visited_neighbors = set() 
-    attempts = 0
-    
-    while attempts < max_attempts:
-        row_to_drop = tuple(prng.sample(range(n_start_points), no_rows_to_drop))
-        if replication == 'y':
-            row_to_add = tuple(prng.choices(range(n_candidate_points), k=no_rows_to_add))
-        else:
-            row_to_add = tuple(prng.sample(range(n_candidate_points), no_rows_to_add))
-        neighbor_key = (row_to_drop, row_to_add)
-        
-        # Check if visited and skip if so
-        if neighbor_key in visited_neighbors:
-            continue
-        visited_neighbors.add(neighbor_key)
-        attempts += 1
-
-        new_runs_costs = cost_array[row_to_add, :]
-        cost_new = new_runs_costs.sum(axis=0)
-        cost_reduction = current_cost[list(row_to_drop), :].sum(axis=0)
-        additional_cost = cost_new - cost_reduction
-        
-        if np.any(additional_cost > available_budget):
-            continue
-
-        tmp_full = np.r_[
-            np.delete(start_design, list(row_to_drop), 0), 
-            candidate_set_expanded[list(row_to_add), :]
-        ]
-        info_mat = tmp_full.T @ tmp_full
-        
-        if np.linalg.det(info_mat) <= 0:
-            continue
-
-        quality_check, criterion_value = evaluation_calculation(info_mat, best_criterion_found)
-        
-        if quality_check:
-            change_made = True
-
-            best_criterion_found = criterion_value
-            best_rows_to_drop = row_to_drop
-            best_rows_to_add = row_to_add
-
-            if search_style != 'best':
-                break
-
-    return best_criterion_found, change_made, best_rows_to_drop, best_rows_to_add
-
-def neighbourhood_search(candidate_set_expanded:np.ndarray, 
-                         start_design:np.ndarray, 
-                         start_des_criterion_value:float, 
-                         current_cost:np.ndarray, 
-                         cost_array:np.ndarray, 
-                         total_budgets:list, 
-                         relation:str, 
-                         search_style:str, 
-                         evaluation_calculation, 
-                         prng):
-    
-    # inputs (default settings)
-    replication = 'y'                       # allow replicate rows in design (y/n)
-    MAX_NEIGHBORS_FOR_LIST = int(1e6)       # memory cap on row combinations for using exhaustive neighbourhood search
-    MAX_ATTEMPTS = int(5e4)                 # maximum amount of combinations to test for non-exhaustive, random search
-
-    no_rows_to_drop = int(relation[0])
-    no_rows_to_add = int(relation[1])
-    n_candidate_points = candidate_set_expanded.shape[0]
-    n_start_points = start_design.shape[0]
-
-    try:
-        drops = math.comb(n_start_points, no_rows_to_drop)
-        if replication == 'y':
-            adds = n_candidate_points ** no_rows_to_add
-        else:
-            adds = math.comb(n_candidate_points, no_rows_to_add)
-            
-        total_unique_neighbors = drops * adds
-    except (ValueError, OverflowError):
-        total_unique_neighbors = MAX_NEIGHBORS_FOR_LIST + 1 
-
-    if total_unique_neighbors <= MAX_NEIGHBORS_FOR_LIST:
-        return _exhaustive_search_list(
-            candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
-            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication
-        )
-    else:
-        capped_attempts = min(MAX_ATTEMPTS, total_unique_neighbors)
-        return _random_search_capped(
-            candidate_set_expanded, start_design, start_des_criterion_value, current_cost, 
-            cost_array, total_budgets, relation, search_style, evaluation_calculation, prng, replication, max_attempts=capped_attempts
-        )
                                    
 def generate_vns_design(params:dict):
 
-    # defaults:
+    # defaults (advanced settings):
+    replication = 'y'                       # allow replicate rows in design (y/n)
     neighbors = ['01', '11', '12', '22']
     search_style = 'random'#'best'
     prng = params['prng']
@@ -415,6 +348,10 @@ def generate_vns_design(params:dict):
 
     # get evaluation function
     evaluation_calculation = evaluation_func(criterion, candidate_set_expanded)
+
+    # Check for combinatorial explosion
+    check_combinatorial_explosion(neighbors[params['max_neighborhood']-1], params['run_size_limit'], candidate_set_expanded, replication)
+
 
     best_criterion_value = -np.inf if criterion == 'D' else np.inf
     best_design = None # This is the model matrix
@@ -442,9 +379,9 @@ def generate_vns_design(params:dict):
         for neighborhood_option in path:
             relation = neighbors[neighborhood_option-1]
             
-            new_criterion, change_made, rows_to_drop, rows_to_add = neighbourhood_search(
+            new_criterion, change_made, rows_to_drop, rows_to_add = neighborhood_search(
                 candidate_set_expanded, des, des_criterion_value, cost, cost_array, 
-                total_budgets, relation, search_style, evaluation_calculation, prng
+                total_budgets, relation, search_style, evaluation_calculation, prng, replication
                 )
                 
             if change_made:# continue to next neighborhood
