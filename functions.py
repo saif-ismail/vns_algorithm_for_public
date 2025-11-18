@@ -136,7 +136,7 @@ def generate_candidate_set(params:dict):
     candidate_set_coded = np.hstack(column_arrays)
 
     
-    print(f'Candidate set ready with {candidate_set_coded.shape[0]} points')
+    print(f'\nCandidate set ready with {candidate_set_coded.shape[0]} points')
     return candidate_set_uncoded, candidate_set_coded
 
 def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_locations:dict, dict_of_factors:dict):
@@ -220,7 +220,7 @@ def check_combinatorial_explosion(max_neighborhood:tuple,
 
     if total_unique_neighborhoods > threshold:
         if run_size_limit is not None:
-            formatted_num = f"{total_unique_neighborhoods:.2e}"
+            formatted_num = f"up to {total_unique_neighborhoods:.2e}"
         else:
             formatted_num = f"at least {total_unique_neighborhoods:.2e}"
         
