@@ -28,9 +28,9 @@ if __name__ == '__main__':
     parameters['model'] = pd.read_csv('new_model.csv')
     parameters['no_starts'] = 10
     parameters['max_neighborhood'] = 2
-    parameters['criterion'] = 'D' #D, A
-    parameters['run_size_limit'] = None#None, or an integer number
-    parameters['constraints'] = ['B <= C'] # list of constraint strings. Should be defined in terms of factor names. E.g., 'A + B <= 10', means the sum of factor A and B should be at most 10.
+    parameters['criterion'] = 'D' # D, A
+    parameters['run_size_limit'] = None # None, or an integer number
+    parameters['constraints'] = ['B <= C'] # list of constraint strings. Should be defined in terms of factor names. E.g., 'A + B <= 10', means the sum of factor A and B should be at most 10. Note: for categorical factors, use single quotes around the level name. E.g., "C != 'level_1'"
 
     # parameters['linear_constraints'] = list_of_contraints
 

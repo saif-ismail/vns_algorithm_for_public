@@ -99,7 +99,7 @@ def filter_constraints(all_combs:pd.DataFrame, constraints:list):
     '''
     THIS FUNCTION FILTERS THE DATAFRAME BASED ON THE PROVIDED CONSTRAINTS
     '''    
-    query_str = ' & '.join(constraints) if isinstance(constraints, list) else constraints
+    query_str = ' and '.join(constraints) if isinstance(constraints, list) else constraints
     if len(query_str) == 0:
         return all_combs
 
