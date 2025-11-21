@@ -234,29 +234,31 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
         if np.linalg.det(info_mat_i) > 0:
             indices_np = np.array(potential_candidate_points)
             criterion_value = evaluation_calculation(info_mat_i, np.inf)[1]
-            return full_mat, current_cost_for_all_vars, criterion_value, indices_np
+            return indices_np, criterion_value 
         else:
             continue
 
-    return None, None, None, None
+    return None, None
 
 def neighborhood_search(candidate_set_expanded:np.ndarray, 
-                         start_design:np.ndarray, 
-                         start_des_criterion_value:float, 
-                         current_cost:np.ndarray, 
-                         cost_array:np.ndarray, 
-                         total_budgets:list, 
-                         relation:str, 
-                         search_style:str, 
-                         evaluation_calculation, 
-                         prng,
-                         replication:str):
+                        design_indices:np.ndarray, 
+                        start_des_criterion_value:float,
+                        cost_array:np.ndarray, 
+                        total_budgets:list, 
+                        relation:str, 
+                        search_style:str, 
+                        evaluation_calculation, 
+                        prng,
+                        replication:str):
+    
+    current_design = candidate_set_expanded[design_indices, :]
+    current_cost = cost_array[design_indices, :]
     
     available_budget = total_budgets - current_cost.sum(axis=0)
     no_rows_to_drop = int(relation[0])
     no_rows_to_add = int(relation[1])
     
-    list1 = list(itertools.combinations(range(start_design.shape[0]), no_rows_to_drop)) # to remove
+    list1 = list(itertools.combinations(range(current_design.shape[0]), no_rows_to_drop)) # to remove
     if replication == 'y':
         list2 = list(itertools.product(range(candidate_set_expanded.shape[0]), repeat=no_rows_to_add)) # to append
     elif replication == 'n':
@@ -283,7 +285,7 @@ def neighborhood_search(candidate_set_expanded:np.ndarray,
             continue
             
         tmp_full = np.r_[
-            np.delete(start_design, list(row_to_drop), 0), 
+            np.delete(current_design, list(row_to_drop), 0), 
             candidate_set_expanded[list(row_to_add), :]
         ]
         info_mat = tmp_full.T @ tmp_full
@@ -308,7 +310,7 @@ def neighborhood_search(candidate_set_expanded:np.ndarray,
 def generate_vns_design(params:dict):
 
     # defaults (advanced settings):
-    replication = 'y'                       # allow replicate rows in design (y/n)
+    replication = 'n'                       # allow replicate rows in design (y/n)
     neighbors = ['01', '11', '12', '22']
     search_style = 'random'#'best'
     prng = params['prng']
@@ -340,7 +342,6 @@ def generate_vns_design(params:dict):
 
 
     best_criterion_value = -np.inf if criterion == 'D' else np.inf
-    best_design = None # This is the model matrix
     best_cost = None
     best_uncoded_design = None # These are the uncoded factor levels
 
@@ -348,10 +349,10 @@ def generate_vns_design(params:dict):
         # select the number of points in the initial design
         no_start_points = prng.randrange(candidate_set_expanded.shape[1]+2, candidate_set_expanded.shape[1]+3)
         try:
-            des, cost, des_criterion_value, design_indices = get_start_design(
+            design_indices, des_criterion_value  = get_start_design(
                 candidate_set_expanded, no_start_points, cost_array, total_budgets, evaluation_calculation, prng
                 )
-            if des is None: # Explicitly check for the failure case
+            if design_indices is None: # Explicitly check for the failure case
                 raise TypeError("get_start_design returned None")
         except (TypeError, np.linalg.LinAlgError) as e:
             print(f"Warning: Start {start_itr + 1} failed. Reason: {e}")
@@ -366,18 +367,14 @@ def generate_vns_design(params:dict):
             relation = neighbors[neighborhood_option-1]
             
             new_criterion, change_made, rows_to_drop, rows_to_add = neighborhood_search(
-                candidate_set_expanded, des, des_criterion_value, cost, cost_array, 
+                candidate_set_expanded, design_indices, des_criterion_value, cost_array, 
                 total_budgets, relation, search_style, evaluation_calculation, prng, replication
                 )
                 
             if change_made:# continue to next neighborhood
-                # Update uncoded design matrix
+                # Update design_indices
                 temp_indices = np.delete(design_indices, list(rows_to_drop), 0)
                 design_indices = np.r_[temp_indices, list(rows_to_add)]
-
-                # Rebuild the design and cost from the new indices
-                des = candidate_set_expanded[design_indices, :]
-                cost = cost_array[design_indices, :]
 
                 # Update the criterion
                 des_criterion_value = new_criterion
@@ -400,11 +397,10 @@ def generate_vns_design(params:dict):
 
         if check:
             best_criterion_value = des_criterion_value
-            best_design = des.copy()
-            best_cost = cost.copy()
             best_design_indices = design_indices.copy() 
 
     if best_design_indices is not None:
+        best_cost = cost_array[best_design_indices, :]
         best_uncoded_design = candidate_set_uncoded.iloc[best_design_indices].reset_index(drop=True)
 
     print('Cost \n',best_cost.sum(axis=0))
