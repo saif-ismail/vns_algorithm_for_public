@@ -171,7 +171,7 @@ def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_loc
             cost_array[:,col_ix] = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
     return cost_array, total_budgets
 
-def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cost_array:np.ndarray, total_budgets:list, criterion:str, prng):
+def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cost_array:np.ndarray, total_budgets:list, evaluation_calculation, prng):
     for itr in range(10000):# attempts to generate starting design for each start
         potential_candidate_points = prng.sample(range(candidate_set_expanded.shape[0]), no_start_points)
         #cost check
@@ -186,13 +186,7 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
             info_mat_i = full_mat.T @ full_mat
             det = np.linalg.det(info_mat_i)
             if det > 0:
-                if criterion == 'D':
-                    return full_mat, current_cost_for_all_vars, det
-                # elif criterion_i == 'I':
-                #     tmp_full_avg_var = np.trace(np.linalg.inv(info_mat_i)@moment)/moment[0,0]
-                #     return full_mat, current_cost_for_all_vars, tmp_full_avg_var
-                elif criterion == 'A':
-                    return full_mat, current_cost_for_all_vars, np.trace(np.linalg.inv(info_mat_i))
+                return full_mat, current_cost_for_all_vars, evaluation_calculation(full_mat, np.inf)[1]
             else:
                 continue
 
@@ -290,8 +284,6 @@ def generate_vns_design(params:dict):
     prng = params['prng']
     limit = params['run_size_limit']
     criterion = params['criterion']
-    # get evaluation function
-    evaluation_calculation = evaluation_func(criterion)
 
     # get individual locations for each factor associated columns in the model matrix (intercept included in position 0)
     dict_locations = get_locations_for_all_factors(params['all_factors'])
@@ -310,11 +302,14 @@ def generate_vns_design(params:dict):
     # generate the model matrix
     candidate_set_expanded = create_model_matrix(candidate_set, params['model'], dict_locations)
 
+    # get evaluation function
+    evaluation_calculation = evaluation_func(criterion)
+    
     for start_itr in tqdm(range(params['no_starts'])):
         # select the number of points in the initial design
         no_start_points = prng.randrange(candidate_set_expanded.shape[1]+2, candidate_set_expanded.shape[1]+3)
         try:
-            des, cost, des_criterion_value = get_start_design(candidate_set_expanded, no_start_points, cost_array, total_budgets, criterion, prng)
+            des, cost, des_criterion_value = get_start_design(candidate_set_expanded, no_start_points, cost_array, total_budgets, evaluation_calculation, prng)
         except:
             continue
         # here des includes model matrix columns by default and cost columns
@@ -350,7 +345,7 @@ def generate_vns_design(params:dict):
     print('Design \n',best_design)
     print('Criterion value \n',best_criterion_value)
     print('Shape of design \n', best_design.shape)
-    print('Number of unique combinations \n', len(np.unique(best_design, axis = 0)))
+    print('Number of unique combinations \n', len(best_design.drop_duplicates()))
 
     # convert back to uncoded levels
     best_design.to_csv('vns_design.csv', index=False)

@@ -18,9 +18,7 @@ if __name__ == '__main__':
                     'C':continuous_factor(cost_control=False, 
                         minimum=12, 
                         maximum=36, 
-                        step_size=3),
-                    'D':categorical_factor(cost_control=False,
-                        labels=['L1','L2','L3','L4'])
+                        step_size=3)
                     }
 
     # Build a dictionary with all following parameters:
@@ -30,9 +28,9 @@ if __name__ == '__main__':
     parameters['model'] = pd.read_csv('new_model.csv')
     parameters['no_starts'] = 10
     parameters['max_neighborhood'] = 2
-    parameters['criterion'] = 'D'#D,A
+    parameters['criterion'] = 'D' #D, A
     parameters['run_size_limit'] = None#None, or an integer number
-    parameters['constraints'] = ['B <= C'] #list of constraint strings
+    parameters['constraints'] = ['B <= C'] # list of constraint strings. Should be defined in terms of factor names. E.g., 'A + B <= 10', means the sum of factor A and B should be at most 10.
 
     # parameters['linear_constraints'] = list_of_contraints
 
@@ -40,6 +38,5 @@ if __name__ == '__main__':
 
     #TODO:
     # [X] add a requirements file
-    # [X] convert design back to uncoded levels
+    # [X] convert design back to uncoded levels (only possible if main effect is in model)
     # [X] implement constraints
-    # [ ] add I-optimality
