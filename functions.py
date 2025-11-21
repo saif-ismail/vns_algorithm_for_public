@@ -173,6 +173,8 @@ def create_model_matrix(design:np.ndarray, model:pd.DataFrame, dict_all_factor_c
     return model_mat
 
 def evaluation_func(criterion:str):
+    assert criterion in ['D','A'], "Only 'D' or 'A' criteria are supported."
+    
     if criterion == 'D':
         def calc(info_mat:np.ndarray, current_score:float):
             val = np.linalg.det(info_mat)
