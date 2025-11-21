@@ -139,21 +139,6 @@ def generate_candidate_set(params:dict):
     print(f'Candidate set ready with {candidate_set_coded.shape[0]} points')
     return candidate_set_uncoded, candidate_set_coded
 
-def create_model_matrix(design:np.ndarray, model:pd.DataFrame, dict_all_factor_col_locations:dict):
-    model_mat = np.ones((design.shape[0],1))
-    for row in model.iterrows():
-        concerning_effects = row[1][row[1]>0]        
-        temp1 = np.ones((design.shape[0],1))
-        for itr_factor_name, order in concerning_effects.items():
-            col_ixs = dict_all_factor_col_locations[itr_factor_name]
-            temp2 = design[:,col_ixs]**order
-            if temp1.shape[1]==1 or len(col_ixs)==1:#continuous or categorical two-level factor
-                temp1 = temp1 * temp2
-            else:#categorical factor with more than two levels
-                temp1 = (temp1[:,:,None] * temp2[:,None,:]).reshape(temp1.shape[0], -1)
-        model_mat = np.hstack((model_mat, temp1))
-    return model_mat
-
 def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_locations:dict, dict_of_factors:dict):
 
     cost_related_factors = [factor_name for factor_name, factor_instance in dict_of_factors.items() if factor_instance.cost_control == True]
@@ -171,6 +156,33 @@ def calculate_cost_per_row_per_factor(design:np.ndarray, dict_all_factor_col_loc
             mapping = {tuple(row): val for row, val in zip(factor_instance.coded_levels, factor_instance.cost_per_level)}
             cost_array[:,col_ix] = np.array([mapping[tuple(row)] for row in design[:,cols_in_design]])
     return cost_array, total_budgets
+
+def create_model_matrix(design:np.ndarray, model:pd.DataFrame, dict_all_factor_col_locations:dict):
+    model_mat = np.ones((design.shape[0],1))
+    for row in model.iterrows():
+        concerning_effects = row[1][row[1]>0]        
+        temp1 = np.ones((design.shape[0],1))
+        for itr_factor_name, order in concerning_effects.items():
+            col_ixs = dict_all_factor_col_locations[itr_factor_name]
+            temp2 = design[:,col_ixs]**order
+            if temp1.shape[1]==1 or len(col_ixs)==1:#continuous or categorical two-level factor
+                temp1 = temp1 * temp2
+            else:#categorical factor with more than two levels
+                temp1 = (temp1[:,:,None] * temp2[:,None,:]).reshape(temp1.shape[0], -1)
+        model_mat = np.hstack((model_mat, temp1))
+    return model_mat
+
+def evaluation_func(criterion:str):
+    if criterion == 'D':
+        def calc(info_mat:np.ndarray, current_score:float):
+            val = np.linalg.det(info_mat)
+            return val > current_score, val
+        
+    elif criterion == 'A':
+        def calc(info_mat:np.ndarray, current_score:float):
+            val = np.trace(np.linalg.inv(info_mat))
+            return val < current_score, val
+    return calc
 
 def check_combinatorial_explosion(max_neighborhood:tuple, 
                                   run_size_limit:int| None, 
@@ -227,18 +239,6 @@ def get_start_design(candidate_set_expanded:np.ndarray, no_start_points:int, cos
             continue
 
     return None, None, None, None
-
-def evaluation_func(criterion:str):
-    if criterion == 'D':
-        def calc(info_mat:np.ndarray, current_score:float):
-            val = np.linalg.det(info_mat)
-            return val > current_score, val
-        
-    elif criterion == 'A':
-        def calc(info_mat:np.ndarray, current_score:float):
-            val = np.trace(np.linalg.inv(info_mat))
-            return val < current_score, val
-    return calc
 
 def neighborhood_search(candidate_set_expanded:np.ndarray, 
                          start_design:np.ndarray, 
