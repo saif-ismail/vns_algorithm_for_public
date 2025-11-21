@@ -1,6 +1,6 @@
 # Cost-Constrained Optimal Experimental Design using VNS
 
-This repository contains a Python-based tool for generating optimal experimental designs (DOE) with a primary focus on **cost-constrained problems**. It uses a **Variable Neighborhood Search (VNS)** algorithm to find D-optimal, A-optimal, or I-optimal designs that respect complex budget limitations and linear constraints.
+This repository contains a Python-based tool for generating optimal experimental designs (DOE) with a primary focus on **cost-constrained problems**. It uses a **Variable Neighborhood Search (VNS)** algorithm to find D-optimal or A-optimal designs that respect complex budget limitations and linear constraints.
 
 > 💡 **Project Motivation**
 >
@@ -25,7 +25,6 @@ This algorithm finds the best possible design *within* your budget.
 * **Multiple Optimality Criteria:**
     * **'D'**-Optimality
     * **'A'**-Optimality
-    * **'I'**-Optimality
 * **Constraint Handling:** Supports linear constraints between factors (e.g., `'B <= C'`) and can enforce a total **run size limit**.
 * **Reproducibility:** Uses a seeded random number generator for reproducible results.
 
@@ -153,7 +152,7 @@ parameters['model'] = pd.read_csv('new_model.csv')
 parameters['no_starts'] = 10 
 # Max neighborhood size to explore
 parameters['max_neighborhood'] = 2 
-# 'D', 'A', or 'I'
+# 'D', 'A'
 parameters['criterion'] = 'D' 
 
 # --- Constraints ---
@@ -195,6 +194,6 @@ Number of unique combinations
 
  - `Design`: A `pandas.DataFrame` of the final design (in uncoded levels).
 
- - `Criterion value`: The final optimality score (higher is better for 'D', lower is better for 'I' and 'A').
+ - `Criterion value`: The final optimality score (higher is better for 'D', lower is better for 'A').
 
  - `vns_design.csv`: A new CSV file will be created in your directory containing the optimal design found.
