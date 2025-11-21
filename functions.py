@@ -198,7 +198,7 @@ def evaluation_func(criterion:str, candidate_set_expanded:np.ndarray):
             return val < current_score, val
     return calc
 
-def check_combinatorial_explosion(max_neighborhood:tuple, 
+def check_combinatorial_explosion(max_neighborhood:str, 
                                   run_size_limit:int| None, 
                                   candidate_set_expanded:np.ndarray, 
                                   replication:str, 
@@ -276,7 +276,7 @@ def neighborhood_search(candidate_set_expanded:np.ndarray,
     if replication == 'y':
         list2 = list(itertools.product(range(candidate_set_expanded.shape[0]), repeat=no_rows_to_add)) # to append
     elif replication == 'n':
-        list2 = list(itertools.combinations(range(candidate_set_expanded.shape[0]), no_rows_to_add))
+        list2 = list(itertools.combinations(np.setdiff1d(np.arange(candidate_set_expanded.shape[0]), design_indices).tolist(), no_rows_to_add))
         
     list_ixs = list(itertools.product(list1, list2))
     
