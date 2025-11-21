@@ -310,7 +310,7 @@ def generate_vns_design(params:dict):
         else:
             if criterion == 'D':
                 check = des_criterion_value > best_criterion_value
-            elif criterion == 'A' or criterion == 'I':
+            elif criterion == 'A':
                 check = des_criterion_value < best_criterion_value
 
         if check:
