@@ -187,7 +187,7 @@ def evaluation_func(criterion:str):
     return calc
 
 def check_combinatorial_explosion(max_neighborhood:str, 
-                                  run_size_limit:int| None, 
+                                  run_size_limit: Optional[int], 
                                   candidate_set_expanded:np.ndarray, 
                                   replication:str, 
                                   threshold:float=1e6):
@@ -311,13 +311,15 @@ def neighborhood_search(candidate_set_expanded:np.ndarray,
                                    
 def generate_vns_design(params:dict):
 
-    # defaults (advanced settings):
-    replication = 'n'                       # allow replicate rows in design (y/n)
-    neighbors = ['01', '11', '12', '22']
-    search_style = 'random'#'best'
+    # Advanced settings:
+    replication = 'y'                       # allow replicate rows in design (y/n); default = 'y'
+    neighbors = ['01', '11', '12', '22']    # neighborhood structures to be used; default = ['01', '11', '12', '22']
+    search_style = 'random'                 # 'best', 'sequential' or 'random' search in each neighborhood; default = 'random'
+    
+    # Extract parameters from user input
     prng = params['prng']
     limit = params.get('run_size_limit', None)
-    criterion = params['criterion']
+    criterion = params['criterion']        
 
     # get individual locations for each factor associated columns in the model matrix (intercept included in position 0)
     dict_locations = get_locations_for_all_factors(params['all_factors'])
@@ -361,7 +363,7 @@ def generate_vns_design(params:dict):
             raise RuntimeError(
                 "Could not generate a valid starting design. "
                 "Please check factor settings, constraints, or model. "
-                "The design may be non-singular."
+                "The model matrix of the design may be singular."
             ) from e
         # here des includes model matrix columns by default and cost columns
         path = [1]

@@ -73,7 +73,7 @@ We use the full path to the virtual environment's Python executable to ensure pe
 python -m pip install -r requirements.txt
 ```
 #### 📝 Notes & Troubleshooting
- - **Prerequisites**: Ensure you have Python 3.8+ installed before proceeding.
+ - **Prerequisites**: Ensure you have Python 3.9+ installed before proceeding.
  - **Windows Permissions**: If you encounter a "script is running disabled" error when activating the environment (Step 2), run this command in PowerShell:
 ```PowerShell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
