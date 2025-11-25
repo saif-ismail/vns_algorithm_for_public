@@ -30,8 +30,8 @@ if __name__ == '__main__':
     parameters['max_neighborhood'] = 2                      # Maximum neighborhood structure to be used; default neighborhoods are '01', '11', '12', '22'
     parameters['criterion'] = 'D'                           # Optimality criterion; Supported = D & A
     parameters['run_size_limit'] = None                     # Optional limit on the number of runs in the design. If None, no limit is applied.
-    parameters['constraints'] = ['B <= C']                  # # List of constraints defined by factor names. E.g., 'A + B <= 10' or "C != 'level_1'". Note: If there are no constraints, this line should be commented out
+    parameters['constraints'] = ['B <= C']                  # List of constraints defined by factor names. E.g., 'A + B <= 10' or "C != 'level_1'". Note: If there are no constraints, this line should be commented out
 
 
     # Generate VNS design using the specified parameters
-    generate_vns_design(parameters)
+    generate_vns_design(parameters, output_filename='vns_design.csv')

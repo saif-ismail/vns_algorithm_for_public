@@ -309,7 +309,7 @@ def neighborhood_search(candidate_set_expanded:np.ndarray,
 
     return best_criterion_found, change_made, best_rows_to_drop, best_rows_to_add
                                    
-def generate_vns_design(params:dict):
+def generate_vns_design(params:dict, output_filename:str='vns_design.csv'):
 
     # Advanced settings:
     replication = 'y'                       # allow replicate rows in design (y/n); default = 'y'
@@ -414,4 +414,5 @@ def generate_vns_design(params:dict):
     print('Number of unique combinations \n', len(best_uncoded_design.drop_duplicates()))
 
     # convert back to uncoded levels
-    best_uncoded_design.to_csv('vns_design.csv', index=False)
+    output_filename = output_filename if output_filename[-4:] == '.csv' else output_filename.split('.')[0] + '.csv'
+    best_uncoded_design.to_csv(output_filename, index=False)
