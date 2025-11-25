@@ -192,6 +192,7 @@ parameters['criterion'] = 'D'
 # Optional hard limit on the total number of runs
 parameters['run_size_limit'] = None 
 # Linear constraints between factors (using uncoded factor names)
+# If there are no constraints, this line should be commented out
 parameters['constraints'] = ['B <= C'] 
 ```
 ### Step 3: Run the Script
