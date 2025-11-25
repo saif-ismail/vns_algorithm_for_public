@@ -23,19 +23,15 @@ if __name__ == '__main__':
 
     # Build a dictionary with all following parameters:
     parameters = {}
-    parameters['prng'] = random.Random(2999)# for reproducibility, seed number can be changed
-    parameters['all_factors'] = all_factors
-    parameters['model'] = pd.read_csv('new_model.csv')
-    parameters['no_starts'] = 10
-    parameters['max_neighborhood'] = 2
-    parameters['criterion'] = 'D'#D,A
-    parameters['run_size_limit'] = None#None, or an integer number
-    # parameters['linear_constraints'] = list_of_contraints
+    parameters['prng'] = random.Random(2999)                # for reproducibility, seed number can be changed
+    parameters['all_factors'] = all_factors                 
+    parameters['model'] = pd.read_csv('new_model.csv')      # Model definition in csv file, see example file 'new_model.csv' or README for details
+    parameters['no_starts'] = 10                            # Number of random starts
+    parameters['max_neighborhood'] = 2                      # Maximum neighborhood structure to be used; default neighborhoods are '01', '11', '12', '22'
+    parameters['criterion'] = 'D'                           # Optimality criterion; Supported = D & A
+    parameters['run_size_limit'] = None                     # Optional limit on the number of runs in the design. If None, no limit is applied.
+    parameters['constraints'] = ['B <= C']                  # List of constraint strings. Should be defined in terms of factor names. E.g., 'A + B <= 10', means the sum of factor A and B should be at most 10. Note: for non-numeric factor levels, use single quotes around the level label. E.g., "C != 'level_1'"
 
+
+    # Generate VNS design using the specified parameters
     generate_vns_design(parameters)
-
-    #TODO:
-    # add a requirements file
-    # convert design back to uncoded levels
-    # implement constraints
-    # add I-optimality
