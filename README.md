@@ -108,12 +108,11 @@ A,B,C
 
 Open main.py and edit the all_factors and parameters dictionaries. This is the main control panel.
 
-#### A) Define Factors (all_factors)
-
+#### A) Define Factors (`all_factors`)
 Define each of your experimental factors. This is where you set up your cost constraints.
 
 **Example of a Cost-Constrained Factor**: Here, Factor 'A' is discrete, and each level has a specific cost. The algorithm will not be allowed to generate a design where the total cost for Factor 'A' exceeds 142.
-
+Python
 ```Python
 'A': discrete_numeric_factor(
     cost_control=True,        # <-- Enable cost control for this factor
@@ -122,8 +121,9 @@ Define each of your experimental factors. This is where you set up your cost con
     budget=142                # <-- Total budget for Factor A
 )
 ```
-**Example of a Non-Cost-Constrained Factor**: Factor 'B' is a standard continuous factor with no budget.
 
+**Example of a Non-Cost-Constrained Factor**: Factor 'B' is a standard continuous factor with no budget.
+Python
 ```Python
 'B': continuous_factor(
     cost_control=False, 
@@ -132,6 +132,39 @@ Define each of your experimental factors. This is where you set up your cost con
     step_size=3
 )
 ```
+
+**🔬 Factor Configuration Examples**
+
+When defining factors in `main.py`'s `all_factors` dictionary, the `cost_control` flag significantly changes the required arguments.
+| Factor Type | `cost_control=False` (Standard DOE) | `cost_control=True` (Cost-Constrained DOE) |
+| :--- | :--- | :--- |
+| **Discrete Numeric** | Requires: `levels` (np.ndarray) | Requires: `levels`, `cost_per_level`, `budget` |
+| **Continuous** | Requires: `minimum`, `maximum`, `step_size` | Requires: `minimum`, `maximum`, `step_size`, `min_cost`, `step_cost`, `budget` |
+| **Categorical** | Requires: `labels` (list[str]) | Requires: `labels`, `cost_per_level`, `budget` |
+
+1.  `discrete_numeric_factor`
+
+A factor with distinct numeric levels, like temperature set points or number of steps.
+| Scenario	| Example Code	| Explanation | 
+| :--- | :--- | :--- |
+| **Cost-Constrained** (`True`)	| ```'A': discrete_numeric_factor(cost_control=True, levels=np.array([1, 2, 3]), cost_per_level=[2, 8, 14], budget=142)``` | The cost for levels 1, 2, and 3 are 2, 8, and 14, respectively. The total cost for Factor A across the whole design **must not exceed 142**. | 
+| **Standard** (`False`)	| ```'A': discrete_numeric_factor(cost_control=False, levels=np.array([-1, 0, 1]))``` |	Standard discrete factor. No cost is considered in the optimization for this factor. | 
+
+2. `continuous_factor`
+
+A factor that can take any value between a minimum and maximum, with a defined step size (e.g., concentration, pressure).
+| Scenario	| Example Code	| Explanation | 
+| :--- | :--- | :--- |
+| **Cost-Constrained** (`True`)	| ```'B': continuous_factor(cost_control=True, minimum=10, maximum=50, step_size=5, min_cost=50, step_cost=10, budget=600)``` | Cost is a linear function of the factor level. A level of 10 costs 50, a level of 10+5 costs 50+10=60. The total cost for Factor B across the design **must not exceed 600**. | 
+| **Standard** (`False`)	| ```'B': continuous_factor(cost_control=False, minimum=10, maximum=50, step_size=5)``` | Standard continuous factor. The design points will be selected from the possible levels (10, 15, 20, ..., 50). | 
+
+3. `categorical_factor`
+
+A factor with non-numeric labels, such as different vendors or material types.
+| Scenario	| Example Code	| Explanation |
+| :--- | :--- | :--- |
+| **Cost-Constrained** (`True`)	| ```'C': categorical_factor(cost_control=True, labels=['VendorX', 'VendorY', 'VendorZ'], cost_per_level=[50, 80, 120], budget=500)```	| The cost for using 'VendorX', 'VendorY', and 'VendorZ' in a single run is 50, 80, and 120, respectively. The total cost for Factor C across the whole design **must not exceed 500**. | 
+| **Standard** (`False`)	| ```'C': categorical_factor(cost_control=False, labels=['VendorX', 'VendorY', 'VendorZ'])```	| Standard categorical factor. No cost is considered in the optimization for this factor. | 
 
 #### B) Set Algorithm Parameters (`parameters`)
 
