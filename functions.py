@@ -1,5 +1,6 @@
 import itertools
 import math
+from pdb import run
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -369,7 +370,14 @@ def generate_vns_design(params:dict, output_filename:str='vns_design.csv'):
         path = [1]
         for neighborhood_option in path:
             relation = neighbors[neighborhood_option-1]
-            
+            # Check if applying this neighborhood would exceed run size limit
+            if limit is not None and (design_indices.shape[0] - int(relation[0]) + int(relation[1])) > limit:
+                if neighborhood_option == params['max_neighborhood']:
+                    break
+                else:
+                    path.append(neighborhood_option+1)
+                    continue
+
             new_criterion, change_made, rows_to_drop, rows_to_add = neighborhood_search(
                 candidate_set_expanded, design_indices, des_criterion_value, cost_array, 
                 total_budgets, relation, search_style, evaluation_calculation, prng, replication
@@ -384,7 +392,6 @@ def generate_vns_design(params:dict, output_filename:str='vns_design.csv'):
                 des_criterion_value = new_criterion
 
                 path.append(1)
-                continue
             else:
                 if neighborhood_option == params['max_neighborhood']:
                     break
