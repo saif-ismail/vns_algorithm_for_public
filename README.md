@@ -231,3 +231,9 @@ Number of unique combinations
  - `Criterion value`: The final optimality score (higher is better for 'D', lower is better for 'A').
 
  - `vns_design.csv`: A new CSV file will be created in your directory containing the optimal design found.
+
+## License
+This project is released under the BSD 3-Clause License with an additional
+restriction that prohibits using the code for training or fine-tuning
+artificial intelligence models.  
+See the LICENSE file for the full license text.
