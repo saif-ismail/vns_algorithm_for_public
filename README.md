@@ -232,6 +232,10 @@ Number of unique combinations
 
  - `vns_design.csv`: A new CSV file will be created in your directory containing the optimal design found.
 
+## Citing
+
+A formal citation will be added here once the paper is published.
+
 ## License
 This project is released under the BSD 3-Clause License with an additional
 restriction that prohibits using the code for training or fine-tuning
